@@ -1,0 +1,13 @@
+# Project-level Streamlit config (read when Streamlit runs from the repo root).
+
+[browser]
+# Streamlit sends anonymous usage stats by default. This is a privacy-first app,
+# so nothing leaves the machine unless the user opts in (LangSmith, web search).
+gatherUsageStats = false
+
+[server]
+headless = true
+maxUploadSize = 50  # MB; the API enforces LOCALMIND_RAG_MAX_UPLOAD_MB as well
+
+[theme]
+primaryColor = "#2a78d6"
