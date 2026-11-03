@@ -105,3 +105,28 @@ class Message(Base):
     run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+
+
+class Feedback(Base):
+    """User feedback on an assistant message (one row per message, upserted).
+
+    Stored locally so the dashboard works without LangSmith; mirrored to
+    LangSmith when the message has a traced run.
+    """
+
+    __tablename__ = "feedback"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("messages.id", ondelete="CASCADE"), unique=True
+    )
+    # LangSmith convention: 1 = good, 0 = bad, so the average is the approval rate.
+    score: Mapped[int] = mapped_column(Integer)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    langsmith_feedback_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    message: Mapped[Message] = relationship()
