@@ -101,3 +101,43 @@ class FakeFactory:
     @property
     def all_calls(self) -> list[list[BaseMessage]]:
         return [c for _, _, llm in self.built for c in llm.calls]
+
+
+class FakeToolChat(BaseChatModel):
+    """Replays a script of AIMessages (tool calls, then an answer); supports bind_tools.
+
+    ``repeat_last=True`` keeps returning the last scripted message forever, which
+    simulates a model stuck in a tool-calling loop.
+    """
+
+    script: list[AIMessage]
+    repeat_last: bool = False
+    error: Exception | None = None
+    calls: list[list[BaseMessage]] = Field(default_factory=list)
+    bound_tools: list[str] = Field(default_factory=list)
+
+    @property
+    def _llm_type(self) -> str:
+        return "fake-tool-chat"
+
+    def bind_tools(self, tools, **kwargs):  # type: ignore[override]
+        self.bound_tools = [t.name for t in tools]
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        self.calls.append(list(messages))
+        if self.error:
+            raise self.error
+        i = len(self.calls) - 1
+        msg = self.script[min(i, len(self.script) - 1)] if self.repeat_last else self.script[i]
+        msg = msg.model_copy(
+            update={
+                "usage_metadata": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+                "response_metadata": {"eval_count": 5, "eval_duration": 250_000_000},
+            }
+        )
+        return ChatResult(generations=[ChatGeneration(message=msg)])
+
+
+def tool_call(name: str, args: dict, call_id: str = "call_1") -> AIMessage:
+    return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": call_id}])

@@ -20,6 +20,11 @@ def describe_ollama_error(exc: Exception, model: str, base_url: str) -> Friendly
     """Map an exception raised while calling a model to a message the user can act on."""
     if isinstance(exc, httpx.ConnectError | ConnectionError):
         return FriendlyError("Ollama is not reachable", install_hint(base_url))
+    if isinstance(exc, ResponseError) and "does not support tools" in str(exc):
+        return FriendlyError(
+            f"Model '{model}' does not support tool calling",
+            "Use a tool-capable model such as qwen2.5:3b, llama3.2 or mistral",
+        )
     if isinstance(exc, ResponseError) and exc.status_code == 404:
         return FriendlyError(f"Model '{model}' is not installed", f"Run: ollama pull {model}")
     if isinstance(exc, httpx.TimeoutException):
