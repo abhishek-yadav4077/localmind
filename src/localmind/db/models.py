@@ -103,6 +103,9 @@ class Message(Base):
     memory_summarized: Mapped[bool] = mapped_column(Boolean, default=False)
     # LangSmith run id of the LLM call that produced this message (Phase 3).
     run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    # Mode-specific extras: agent tool steps, RAG citations. JSON keeps the
+    # messages table generic instead of one column per feature.
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
 

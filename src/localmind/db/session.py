@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Engine, create_engine, event, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -49,8 +49,15 @@ class Database:
         self._factory = sessionmaker(self.engine, expire_on_commit=False)
 
     def create_all(self) -> None:
-        """Create tables if missing (no migrations yet; see README 'Future work')."""
+        """Create missing tables, then add missing nullable columns.
+
+        ``create_all`` never alters existing tables, so a column added in a later
+        version would crash older databases. ``add_missing_columns`` covers the
+        additive case. Anything more (renames, type changes) needs Alembic,
+        which is listed as future work.
+        """
         Base.metadata.create_all(self.engine)
+        add_missing_columns(self.engine)
 
     @contextmanager
     def session(self) -> Iterator[Session]:
@@ -64,3 +71,23 @@ class Database:
             raise
         finally:
             session.close()
+
+
+def add_missing_columns(engine: Engine) -> list[str]:
+    """``ALTER TABLE ... ADD COLUMN`` for nullable model columns missing in the DB."""
+    inspector = inspect(engine)
+    added: list[str] = []
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            existing = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing:
+                    continue
+                if not column.nullable:  # can't add NOT NULL without a default
+                    raise RuntimeError(
+                        f"Column {table.name}.{column.name} is NOT NULL; write a migration"
+                    )
+                ddl = column.type.compile(dialect=engine.dialect)
+                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {ddl}'))
+                added.append(f"{table.name}.{column.name}")
+    return added

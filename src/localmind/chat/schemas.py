@@ -39,6 +39,7 @@ class MessageOut(BaseModel):
     completion_tokens: int | None = None
     memory_summarized: bool = False
     run_id: str | None = None
+    details: dict[str, Any] | None = None
 
 
 class ConversationOut(BaseModel):
