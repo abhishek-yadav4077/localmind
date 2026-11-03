@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage, SystemMessage
 from ollama import ResponseError
 
@@ -22,6 +24,7 @@ from localmind.db import Database
 from localmind.llm import ModelParams
 from localmind.memory import MemoryPolicy
 from localmind.personas import PersonaService
+from localmind.tracing import Tracer, TracingStatus
 from tests.fakes import FakeFactory
 
 
@@ -175,3 +178,45 @@ def test_export_markdown_and_json(chat: ChatService) -> None:
     data = json.loads(chat.export(conv.id, "json"))
     assert data["conversation"]["id"] == conv.id
     assert [m["role"] for m in data["messages"]] == ["user", "assistant"]
+
+
+# --- Phase 3: tracing metadata ------------------------------------------------
+
+
+class RecordingHandler(BaseCallbackHandler):
+    """Records the run id, tags and metadata LangChain passes to each chat-model run."""
+
+    def __init__(self) -> None:
+        self.runs: list[dict] = []
+
+    def on_chat_model_start(self, serialized, messages, *, run_id, tags=None, metadata=None, **kw):
+        self.runs.append({"run_id": str(run_id), "tags": tags or [], "metadata": metadata or {}})
+
+
+def test_runs_carry_metadata_and_stored_run_id(db, settings, factory) -> None:
+    tracer = Tracer(TracingStatus(True, "p", "ok", client=MagicMock()), settings)
+    chat = ChatService(db, settings, llm_factory=factory, tracer=tracer)
+    personas = PersonaService(db)
+    personas.seed_defaults()
+    coach = next(p for p in personas.list() if p.name == "Interview Coach")
+    conv = chat.create_conversation(model="mistral", persona_id=coach.id)
+
+    handler = RecordingHandler()
+    events = list(chat.stream_reply(conv.id, "hi", run_config={"callbacks": [handler]}))
+    done = next(e for e in events if isinstance(e, DoneEvent))
+
+    chat_run = handler.runs[0]
+    # The id stored on the message is the id of the traced chat-model run.
+    assert chat_run["run_id"] == done.message.run_id
+    assert {"localmind", "mode:chat", "model:mistral", "persona:interview-coach"} <= set(
+        chat_run["tags"]
+    )
+    md = chat_run["metadata"]
+    assert md["conversation_id"] == conv.id
+    assert md["persona"] == "Interview Coach" and md["mode"] == "chat"
+    assert md["app_version"] == settings.app_version
+
+    # The title run shares metadata but has its own run id.
+    title_run = handler.runs[-1]
+    assert title_run["run_id"] != chat_run["run_id"]
+    assert title_run["metadata"]["conversation_id"] == conv.id

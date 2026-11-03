@@ -5,7 +5,12 @@ Run:
     python scripts/chat_cli.py --model mistral --persona "Code Reviewer" --num-ctx 2048
     python scripts/chat_cli.py --resume <conversation_id>
 
-Commands inside the chat:  /export md | /export json | /quit
+Commands inside the chat:
+    /good [comment]   thumbs-up the last answer (sent to LangSmith if enabled)
+    /bad [comment]    thumbs-down the last answer
+    /trace            print the LangSmith link of the last answer
+    /export md|json   export the conversation
+    /quit
 """
 
 from __future__ import annotations
@@ -13,7 +18,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from localmind.bootstrap import build_context
+from localmind.bootstrap import AppContext, build_context
 from localmind.chat import DoneEvent, ErrorEvent, MemoryEvent, TitleEvent, TokenEvent
 from localmind.llm import ModelParams
 
@@ -47,8 +52,17 @@ def main() -> int:
 
     tracing = f"LangSmith project '{ctx.tracing.project}'" if ctx.tracing.enabled else "off"
     print(f"conversation={conv.id} model={conv.model} tracing={tracing}")
-    print("Type /quit to exit, /export md|json to export.\n")
+    print("Commands: /good, /bad [comment], /trace, /export md|json, /quit\n")
 
+    try:
+        return _loop(ctx, conv.id)
+    finally:
+        ctx.tracer.flush()  # make sure queued traces/feedback reach LangSmith before exit
+
+
+def _loop(ctx: AppContext, conversation_id: str) -> int:
+    last_message_id: int | None = None
+    last_run_id: str | None = None
     while True:
         try:
             text = input("you> ").strip()
@@ -59,19 +73,35 @@ def main() -> int:
             return 0
         if text.startswith("/export"):
             fmt = "json" if text.endswith("json") else "markdown"
-            print(ctx.chat.export(conv.id, fmt))
+            print(ctx.chat.export(conversation_id, fmt))
+            continue
+        if text.startswith(("/good", "/bad")):
+            if last_message_id is None:
+                print("No answer to rate yet.")
+                continue
+            command, _, comment = text.partition(" ")
+            fb = ctx.feedback.submit(last_message_id, command == "/good", comment or None)
+            where = "local + LangSmith" if fb.synced_to_langsmith else "local only"
+            print(
+                f"     [feedback saved ({where})]"
+                + (f" error: {fb.sync_error}" if fb.sync_error else "")
+            )
+            continue
+        if text == "/trace":
+            print(f"     {ctx.tracer.run_url(last_run_id) or 'tracing disabled'}")
             continue
         if not text:
             continue
 
         print("bot> ", end="", flush=True)
-        for event in ctx.chat.stream_reply(conv.id, text):
+        for event in ctx.chat.stream_reply(conversation_id, text):
             if isinstance(event, TokenEvent):
                 print(event.content, end="", flush=True)
             elif isinstance(event, MemoryEvent):
                 print(f"[memory summarized: {event.summarized_messages} messages] ", end="")
             elif isinstance(event, DoneEvent):
                 m = event.message
+                last_message_id, last_run_id = m.id, m.run_id
                 print(
                     f"\n     [{m.latency_ms} ms total | TTFT {m.ttft_ms} ms | "
                     f"{m.tokens_per_sec} tok/s | {m.prompt_tokens} in / "

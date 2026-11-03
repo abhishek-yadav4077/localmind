@@ -12,7 +12,8 @@ from localmind.chat import ChatService
 from localmind.config import Settings, configure_logging, get_settings
 from localmind.db import Database
 from localmind.personas import PersonaService
-from localmind.tracing import TracingStatus, init_tracing
+from localmind.tracing import Tracer, TracingStatus, init_tracing
+from localmind.tracing.feedback import FeedbackService
 
 
 @dataclass
@@ -24,6 +25,8 @@ class AppContext:
     chat: ChatService
     personas: PersonaService
     tracing: TracingStatus
+    tracer: Tracer
+    feedback: FeedbackService
 
 
 def build_context(settings: Settings | None = None) -> AppContext:
@@ -31,6 +34,7 @@ def build_context(settings: Settings | None = None) -> AppContext:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
     tracing = init_tracing(settings)
+    tracer = Tracer(tracing, settings)
     db = Database(settings.database_url)
     db.create_all()
     personas = PersonaService(db)
@@ -38,7 +42,9 @@ def build_context(settings: Settings | None = None) -> AppContext:
     return AppContext(
         settings=settings,
         db=db,
-        chat=ChatService(db, settings),
+        chat=ChatService(db, settings, tracer=tracer),
         personas=personas,
         tracing=tracing,
+        tracer=tracer,
+        feedback=FeedbackService(db, tracer),
     )

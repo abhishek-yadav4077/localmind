@@ -45,6 +45,7 @@ from localmind.llm import ModelParams, get_chat_model
 from localmind.llm.ollama_client import install_hint
 from localmind.memory import MemoryManager, MemoryPolicy
 from localmind.memory.summarizer import db_role_to_message, summary_message
+from localmind.tracing import Tracer, child_config, disabled_tracer, merge_configs
 
 logger = get_logger(__name__)
 
@@ -64,6 +65,7 @@ class ChatService:
         llm_factory: ``(model, params) -> BaseChatModel``. Injected so tests can
             pass fake models and never need a running Ollama.
         memory_policy: Summarization thresholds.
+        tracer: LangSmith facade; defaults to a no-op tracer.
     """
 
     def __init__(
@@ -72,6 +74,7 @@ class ChatService:
         settings: Settings | None = None,
         llm_factory: LLMFactory | None = None,
         memory_policy: MemoryPolicy | None = None,
+        tracer: Tracer | None = None,
     ) -> None:
         self.db = db
         self.settings = settings or get_settings()
@@ -79,6 +82,7 @@ class ChatService:
             lambda model, params: get_chat_model(model, params, self.settings)
         )
         self.memory_policy = memory_policy or MemoryPolicy()
+        self.tracer = tracer or disabled_tracer(self.settings)
 
     # ------------------------------------------------------------------ CRUD
     def create_conversation(
@@ -186,12 +190,25 @@ class ChatService:
             repo.add_message(s, conv.id, "user", user_text)
             model, params = conv.model, ModelParams(**(conv.params or {}))
             persona_prompt = conv.persona.system_prompt if conv.persona else None
+            persona_name = conv.persona.name if conv.persona else None
             summary, summarized_up_to = conv.summary, conv.summarized_up_to
             needs_title = not conv.title_generated
             rows = repo.list_messages(s, conv.id, after_id=summarized_up_to)
             history = [(m.id, db_role_to_message(m.role, m.content)) for m in rows]
 
-        config: dict[str, Any] = {"run_name": "chat", **(run_config or {})}
+        # Tags/metadata (mode, model, persona, conversation_id, app version) and a
+        # pre-generated run_id that we store on the assistant message for
+        # feedback + trace links.
+        config = merge_configs(
+            self.tracer.run_config(
+                "chat",
+                model=model,
+                persona=persona_name,
+                conversation_id=conversation_id,
+                run_name="chat",
+            ),
+            run_config,
+        )
 
         # 3. Memory: summarize old turns if the prompt is getting too big.
         memory_summarized = False
@@ -201,8 +218,10 @@ class ChatService:
         if memory.needs_summary(prompt, len(history) - 1, params.num_ctx, params.max_tokens):
             older, recent = memory.split(history[:-1])
             try:
-                summary = memory.summarize(summary, [m for _, m in older], config=_child(config))
-            except Exception as exc:
+                summary = memory.summarize(
+                    summary, [m for _, m in older], config=child_config(config, "memory_summarize")
+                )
+            except Exception as exc:  # degrade gracefully: answer with the full history
                 logger.warning("memory summarization failed", exc_info=True)
                 yield ErrorEvent(error=f"Memory summarization failed: {exc}")
             else:
@@ -249,6 +268,7 @@ class ChatService:
                 answer,
                 model=model,
                 memory_summarized=memory_summarized,
+                run_id=self.tracer.stored_run_id(config),
                 **stats.model_dump(),
             )
             repo.touch_conversation(s, conv)
@@ -260,7 +280,9 @@ class ChatService:
             title_llm = self.llm_factory(
                 model, ModelParams(temperature=0.2, max_tokens=24, num_ctx=2048)
             )
-            title = generate_title(title_llm, user_text, answer, config=_child(config))
+            title = generate_title(
+                title_llm, user_text, answer, config=child_config(config, "generate_title")
+            )
             with self.db.session() as s:
                 conv = self._require(s, conversation_id)
                 conv.title, conv.title_generated = title, True
@@ -315,8 +337,3 @@ class ChatService:
         if conv is None:
             raise ConversationNotFoundError(f"Conversation {conversation_id} not found")
         return conv
-
-
-def _child(config: dict[str, Any]) -> dict[str, Any]:
-    """Config for helper runs (summary/title): same tags/metadata, own run name."""
-    return {k: v for k, v in config.items() if k != "run_name"}
