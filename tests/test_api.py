@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Iterator
+from pathlib import Path
 
 import httpx
 import pytest
@@ -214,3 +215,22 @@ def test_ollama_down_returns_503(client: TestClient) -> None:
     r = client.get("/models")
     assert r.status_code == 503 and "ollama serve" in r.json()["hint"]
     assert client.get("/health").json()["status"] == "degraded"
+
+
+def test_evaluation_endpoints(client: TestClient) -> None:
+    from localmind.evaluation.runner import write_results
+
+    settings = client.app.state.ctx.settings
+    assert client.get("/evaluation/runs").json() == []
+    write_results(
+        Path(settings.eval_results_dir),
+        "20260101-000000",
+        [],
+        [{"model": "m", "correctness": 0.9}],
+        {"run_id": "20260101-000000", "models": ["m"]},
+    )
+    runs = client.get("/evaluation/runs").json()
+    assert [r["run_id"] for r in runs] == ["20260101-000000"]
+    detail = client.get("/evaluation/runs/20260101-000000").json()
+    assert detail["summary"] == [{"model": "m", "correctness": 0.9}]
+    assert client.get("/evaluation/runs/missing").status_code == 404

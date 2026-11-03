@@ -21,6 +21,7 @@ from localmind.api.routes import (
     conversations,
     dashboard,
     documents,
+    evaluation,
     feedback,
     health,
     models,
@@ -93,6 +94,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         feedback,
         personas,
         dashboard,
+        evaluation,
     ):
         app.include_router(module.router)
     return app

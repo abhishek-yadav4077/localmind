@@ -53,7 +53,7 @@ async def sse_response(make_events: Callable[[], Iterator[Any]]) -> EventSourceR
         try:
             for event in events:
                 yield _format(event)
-        except Exception as exc:
+        except Exception as exc:  # headers are already sent: report the error in-band
             logger.exception("stream failed mid-way")
             yield _format({"type": "error", "error": f"{type(exc).__name__}: {exc}"})
 
