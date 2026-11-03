@@ -12,7 +12,7 @@ every run. Explicitly disabling avoids that.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import langsmith as ls
 
@@ -28,6 +28,8 @@ class TracingStatus:
     enabled: bool
     project: str | None
     reason: str
+    # The configured client (None when disabled); excluded from equality/repr.
+    client: ls.Client | None = field(default=None, compare=False, repr=False)
 
 
 def init_tracing(settings: Settings | None = None) -> TracingStatus:
@@ -59,4 +61,4 @@ def init_tracing(settings: Settings | None = None) -> TracingStatus:
     )
     ls.configure(client=client, enabled=True, project_name=settings.langsmith_project)
     logger.info("langsmith tracing enabled", extra={"project": settings.langsmith_project})
-    return TracingStatus(True, settings.langsmith_project, "configured")
+    return TracingStatus(True, settings.langsmith_project, "configured", client=client)
