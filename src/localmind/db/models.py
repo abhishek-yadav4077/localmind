@@ -130,3 +130,52 @@ class Feedback(Base):
     )
 
     message: Mapped[Message] = relationship()
+
+
+class ArenaBattle(Base):
+    """One prompt sent to several models, plus the user's verdict."""
+
+    __tablename__ = "arena_battles"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    prompt: Mapped[str] = mapped_column(Text)
+    persona_id: Mapped[int | None] = mapped_column(
+        ForeignKey("personas.id", ondelete="SET NULL"), nullable=True
+    )
+    params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # True = models ran concurrently (fast, but speed stats share the hardware).
+    parallel: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Verdict: winner_model set for a win; outcome is "win" | "tie" | "all_bad" | None.
+    outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    winner_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    voted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    responses: Mapped[list[ArenaResponse]] = relationship(
+        back_populates="battle", cascade="all, delete-orphan", order_by="ArenaResponse.position"
+    )
+
+
+class ArenaResponse(Base):
+    """One model's answer within a battle, with the same stats as chat messages."""
+
+    __tablename__ = "arena_responses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    battle_id: Mapped[str] = mapped_column(
+        ForeignKey("arena_battles.id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer)  # column order shown in the UI
+    model: Mapped[str] = mapped_column(String(100), index=True)
+    content: Mapped[str] = mapped_column(Text, default="")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ttft_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tokens_per_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    langsmith_feedback_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    battle: Mapped[ArenaBattle] = relationship(back_populates="responses")

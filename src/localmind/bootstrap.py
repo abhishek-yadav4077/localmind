@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from localmind.arena import ArenaService
 from localmind.chat import ChatService
 from localmind.config import Settings, configure_logging, get_settings
 from localmind.db import Database
@@ -27,6 +28,7 @@ class AppContext:
     tracing: TracingStatus
     tracer: Tracer
     feedback: FeedbackService
+    arena: ArenaService
 
 
 def build_context(settings: Settings | None = None) -> AppContext:
@@ -47,4 +49,5 @@ def build_context(settings: Settings | None = None) -> AppContext:
         tracing=tracing,
         tracer=tracer,
         feedback=FeedbackService(db, tracer),
+        arena=ArenaService(db, settings, tracer=tracer),
     )
