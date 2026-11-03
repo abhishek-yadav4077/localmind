@@ -1,0 +1,85 @@
+# Full stack: Ollama + model download + API + UI.
+#
+#   docker compose up -d --build        # first run pulls models (several GB)
+#   open http://localhost:8501
+#
+# Already running Ollama on your machine? Use the override instead:
+#   docker compose -f docker-compose.yml -f docker-compose.host-ollama.yml up -d --build
+name: localmind
+
+x-app: &app
+  build: .
+  image: localmind:latest
+  env_file:
+    - path: .env          # optional: LangSmith keys, model defaults
+      required: false
+  restart: unless-stopped
+
+services:
+  ollama:
+    # Pin a specific tag (e.g. ollama/ollama:0.x.y) for reproducible builds.
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    volumes:
+      - ollama_models:/root/.ollama     # models survive container rebuilds
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    # NVIDIA GPU (needs the NVIDIA Container Toolkit): uncomment.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # One-shot job: pull the models the app needs, then exit.
+  model-init:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      MODELS: ${LOCALMIND_MODELS:-llama3.2 qwen2.5:3b nomic-embed-text}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["for m in $$MODELS; do echo \"pulling $$m\"; ollama pull $$m || exit 1; done"]
+    restart: "no"
+
+  api:
+    <<: *app
+    environment:
+      LOCALMIND_OLLAMA_BASE_URL: http://ollama:11434
+    volumes:
+      - app_data:/app/data                  # SQLite + Chroma
+      - ./eval/results:/app/eval/results    # eval runs visible on the host
+    ports:
+      - "8000:8000"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  ui:
+    <<: *app
+    command: ["streamlit", "run", "src/localmind/ui/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+    environment:
+      LOCALMIND_API_URL: http://api:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  ollama_models:
+  app_data:

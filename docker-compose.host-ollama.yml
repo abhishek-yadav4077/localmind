@@ -1,0 +1,19 @@
+# Override: use the Ollama already running on your computer instead of the
+# bundled container (saves disk space and re-downloading models).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.host-ollama.yml up -d --build
+#
+# Linux only: Ollama listens on 127.0.0.1 by default, which containers can't
+# reach. Start it with OLLAMA_HOST=0.0.0.0 (e.g. `sudo systemctl edit ollama`
+# -> Environment="OLLAMA_HOST=0.0.0.0"). Docker Desktop (macOS/Windows) works as is.
+services:
+  ollama:
+    profiles: ["bundled-ollama"]   # not started unless that profile is requested
+  model-init:
+    profiles: ["bundled-ollama"]
+  api:
+    environment:
+      LOCALMIND_OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # makes the name work on Linux too
+    depends_on: !reset {}
