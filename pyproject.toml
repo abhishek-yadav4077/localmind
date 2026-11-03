@@ -9,6 +9,7 @@ description = "Private, fully local LLM chat studio on Ollama with LangSmith obs
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+authors = [{ name = "Abhishek Yadav" }]
 dependencies = [
   "langchain-core>=1.7,<2",
   "langchain-ollama>=1.1,<2",
@@ -26,6 +27,9 @@ dependencies = [
   "sse-starlette>=2.1",
   "streamlit>=1.40",
 ]
+
+[project.urls]
+Repository = "https://github.com/abhishek-yadav4077/localmind"
 
 [project.optional-dependencies]
 # Document chat is optional: chromadb is a heavy dependency.

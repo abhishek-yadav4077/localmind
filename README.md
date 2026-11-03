@@ -1,6 +1,6 @@
 # 🧠 LocalMind: Private LLM Chat Studio with Observability
 
-[![CI](https://github.com/<your-github-username>/localmind/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-github-username>/localmind/actions/workflows/ci.yml)
+[![CI](https://github.com/abhishek-yadav4077/localmind/actions/workflows/ci.yml/badge.svg)](https://github.com/abhishek-yadav4077/localmind/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 ![LangChain](https://img.shields.io/badge/LangChain-1.x-1c3c3c)
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.x-1c3c3c)
@@ -95,7 +95,7 @@ python scripts/benchmark_table.py --write          # regenerates this section (i
 (16 GB recommended to run 2–3 models).
 
 ```bash
-git clone https://github.com/<your-github-username>/localmind.git && cd localmind
+git clone https://github.com/abhishek-yadav4077/localmind.git && cd localmind
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"                               # app + document chat + web search + dev tools
 
