@@ -106,14 +106,17 @@ Each phase ends with: code runs, tests pass, a summary, a manual test list
 | 7 | Evaluation | `eval/dataset.json` (30 items, 5 categories), upload to LangSmith, experiments per model, evaluators (LLM-judge correctness, conciseness, latency, refusal), CSV export, Evaluation page |
 | 8 | Polish | test coverage gaps, Dockerfile + compose (ollama service + volume, host-Ollama option), GitHub Actions (ruff + pytest), README, CONCEPTS.md, screenshot checklist |
 
-## 6. Running (filled in as phases land)
+## 6. Running
 
 ```bash
-pip install -e ".[dev]"
-cp .env.example .env          # add LANGSMITH_API_KEY
-ollama pull llama3.2
-python scripts/check_setup.py   # Ollama + LangSmith diagnostics
-python scripts/basic_chat.py    # assignment script
-python scripts/chat_cli.py --persona Tutor   # terminal chat on ChatService
-pytest
+pip install -e ".[dev]"        # app + rag + web extras + dev tools
+cp .env.example .env           # add LANGSMITH_API_KEY (optional)
+ollama pull llama3.2 && ollama pull qwen2.5:3b && ollama pull nomic-embed-text
+python scripts/check_setup.py  # Ollama + LangSmith diagnostics
+python scripts/basic_chat.py   # assignment script
+make dev                       # API on :8000 (docs at /docs) + UI on :8501
+make check                     # ruff + pytest (no Ollama needed)
 ```
+
+Terminal tools for quick manual tests: `scripts/chat_cli.py`, `arena_cli.py`,
+`agent_cli.py`, `docs_cli.py`.

@@ -11,4 +11,5 @@ cp .env.example .env            # add your LANGSMITH_API_KEY
 ollama pull llama3.2
 python scripts/check_setup.py   # verifies Ollama + LangSmith
 python scripts/basic_chat.py    # Assignment 24, Task 1
+make dev                        # API :8000 + Streamlit UI :8501
 ```
