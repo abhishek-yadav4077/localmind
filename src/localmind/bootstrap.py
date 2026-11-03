@@ -6,8 +6,10 @@ single, testable composition root instead of globals scattered across modules.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
+from localmind.agent import AgentService
 from localmind.arena import ArenaService
 from localmind.chat import ChatService
 from localmind.config import Settings, configure_logging, get_settings
@@ -15,6 +17,9 @@ from localmind.db import Database
 from localmind.personas import PersonaService
 from localmind.tracing import Tracer, TracingStatus, init_tracing
 from localmind.tracing.feedback import FeedbackService
+
+if TYPE_CHECKING:
+    from localmind.rag import RagService
 
 
 @dataclass
@@ -29,6 +34,21 @@ class AppContext:
     tracer: Tracer
     feedback: FeedbackService
     arena: ArenaService
+    agent: AgentService
+    _rag: RagService | None = field(default=None, repr=False)
+
+    def rag(self) -> RagService:
+        """Document chat service, created on first use.
+
+        Lazy because Chroma is an optional, slow-to-import dependency: the rest
+        of the app starts fast and works without it.
+        """
+        if self._rag is None:
+            from localmind.rag import DocumentStore, RagService
+
+            store = DocumentStore(self.settings)
+            self._rag = RagService(self.db, store, self.settings, tracer=self.tracer)
+        return self._rag
 
 
 def build_context(settings: Settings | None = None) -> AppContext:
@@ -50,4 +70,5 @@ def build_context(settings: Settings | None = None) -> AppContext:
         tracer=tracer,
         feedback=FeedbackService(db, tracer),
         arena=ArenaService(db, settings, tracer=tracer),
+        agent=AgentService(db, settings, tracer=tracer),
     )
