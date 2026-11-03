@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from localmind.config import Settings, get_settings
+from localmind.db import Database
 
 _ENV_PREFIXES = ("LOCALMIND_", "LANGSMITH_", "LANGCHAIN_")
 
@@ -27,3 +28,11 @@ def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
 def settings() -> Settings:
     """Deterministic settings for tests (no .env, single retry for speed)."""
     return Settings(_env_file=None, ollama_max_retries=1)
+
+
+@pytest.fixture
+def db() -> Database:
+    """Fresh in-memory SQLite database with tables created."""
+    database = Database("sqlite://")
+    database.create_all()
+    return database
