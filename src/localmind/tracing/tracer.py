@@ -107,6 +107,11 @@ class Tracer:
                 return None
         return self._ids
 
+    def tenant_id(self) -> str | None:
+        """Workspace id, needed for deep links (None when unknown/disabled)."""
+        ids = self._resolve_ids()
+        return ids[0] if ids else None
+
     def project_url(self) -> str | None:
         ids = self._resolve_ids()
         if ids is None:

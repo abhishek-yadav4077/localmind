@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     rag_top_k: int = Field(default=4, ge=1, le=20)
     rag_max_upload_mb: int = Field(default=20, ge=1)
 
+    # --- Evaluation -------------------------------------------------------
+    # The judge should ideally be a *different* (and stronger) model than the
+    # ones being evaluated, to limit self-preference bias.
+    eval_judge_model: str = "qwen2.5:3b"
+    eval_dataset_path: str = "eval/dataset.json"
+    eval_results_dir: str = "eval/results"
+
     # --- App --------------------------------------------------------------
     database_url: str = "sqlite:///data/localmind.db"
     log_level: str = "INFO"

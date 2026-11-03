@@ -13,8 +13,6 @@ build/
 .env
 data/*
 !data/.gitkeep
-eval/results/*.csv
-!eval/results/.gitkeep
 .DS_Store
 .idea/
 .vscode/
