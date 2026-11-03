@@ -23,7 +23,7 @@ from localmind.evaluation.evaluators import (
 )
 from localmind.evaluation.results import list_runs, load_run
 from localmind.evaluation.runner import EvalRunner, subset
-from localmind.exceptions import NotFoundError
+from localmind.exceptions import LocalMindError, NotFoundError
 from localmind.tracing import Tracer, TracingStatus
 from tests.fakes import FakeOllamaChat
 
@@ -151,6 +151,8 @@ def make_factory(dataset: EvalDataset, wrong_for: str = "weak"):
             q = msgs[-1].content
             if q in refuse:
                 return "I can't help with that."
+            if q not in answers:  # warm-up prompt
+                return "OK"
             return "no idea" if model == wrong_for else answers[q]
 
         return FakeOllamaChat(responder=respond)
@@ -190,15 +192,41 @@ def test_target_errors_are_recorded_and_skipped_by_evaluators(settings, tmp_path
     s = settings.model_copy(update={"eval_results_dir": str(tmp_path)})
     ds = subset(load_dataset(DATASET), 1)
     factory = make_factory(ds)
+    built: list[str] = []
 
-    def broken(model, params):
-        if model == "down":
+    def flaky(model, params):
+        built.append(model)
+        # Warm-up succeeds, then the server "goes away" mid-run.
+        if model == "down" and built.count("down") > 1:
             return FakeOllamaChat(error=httpx.ConnectError("refused"))
         return factory(model, params)
 
-    result = EvalRunner(s, llm_factory=broken).run(ds, ["down"], judge_model="judge")
+    result = EvalRunner(s, llm_factory=flaky).run(ds, ["down"], judge_model="judge")
     assert result.summary[0]["errors"] == 5 and result.summary[0]["correctness"] is None
     assert result.examples[0]["error"] == "Ollama is not reachable"
+
+
+def test_warm_up_runs_once_per_model_and_fails_fast(settings, tmp_path) -> None:
+    import httpx
+
+    s = settings.model_copy(update={"eval_results_dir": str(tmp_path)})
+    ds = subset(load_dataset(DATASET), 1)
+    factory = make_factory(ds)
+    warm: list[str] = []
+
+    def tracking(model, params):
+        if params.max_tokens == 1:
+            warm.append(model)
+        return factory(model, params)
+
+    EvalRunner(s, llm_factory=tracking).run(ds, ["good", "weak"], judge_model="judge")
+    assert warm == ["judge", "good", "weak"]
+
+    def down(model, params):
+        return FakeOllamaChat(error=httpx.ConnectError("refused"))
+
+    with pytest.raises(LocalMindError, match="good: Ollama is not reachable"):
+        EvalRunner(s, llm_factory=down).run(ds, ["good"], judge_model="good")
 
 
 def test_langsmith_mode_uses_evaluate_and_builds_comparison_url(settings, tmp_path) -> None:

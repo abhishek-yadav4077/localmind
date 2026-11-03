@@ -7,11 +7,13 @@ checks and the app behaves identically without LangSmith.
 
 from __future__ import annotations
 
+import contextlib
 import threading
 import time
 import uuid
 from typing import Any
 
+import langsmith as ls
 from langsmith.utils import LangSmithNotFoundError, get_host_url
 
 from localmind.config import Settings, get_logger, get_settings
@@ -149,6 +151,11 @@ class Tracer:
         new_id = uuid.uuid4()
         self.client.create_feedback(run_id, key, score=score, comment=comment, feedback_id=new_id)
         return str(new_id)
+
+    @staticmethod
+    def suppressed() -> contextlib.AbstractContextManager:
+        """Context manager: calls inside it are not traced (e.g. warm-up requests)."""
+        return ls.tracing_context(enabled=False)
 
     def flush(self) -> None:
         """Block until queued traces are sent (call before a script exits)."""

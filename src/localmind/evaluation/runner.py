@@ -178,7 +178,9 @@ class EvalRunner:
             dataset_name = ensure_langsmith_dataset(client, dataset)
 
         by_question = {i.question: i for i in dataset.items}
+        self._warm_up(judge_model, say)
         for model in models:
+            self._warm_up(model, say)
             say(f"evaluating {model} on {len(dataset.items)} examples (judge: {judge_model})")
             target = self.make_target(model, run_id)
             if use_langsmith:
@@ -245,6 +247,21 @@ class EvalRunner:
         summary = summarize(rows)
         paths = write_results(Path(self.settings.eval_results_dir), run_id, rows, summary, meta)
         return EvalRunResult(run_id, meta, summary, rows, paths)
+
+    def _warm_up(self, model: str, say: Callable[[str], None]) -> None:
+        """Load the model before timing starts (untraced).
+
+        The first request to a model includes loading it into memory, often
+        several seconds. Without this, example #1 would inflate the latency stats.
+        """
+        say(f"warming up {model}")
+        llm = self.llm_factory(model, EVAL_PARAMS.model_copy(update={"max_tokens": 1}))
+        try:
+            with self.tracer.suppressed():
+                llm.invoke([HumanMessage(content="Reply with OK.")])
+        except Exception as exc:
+            friendly = describe_ollama_error(exc, model, self.settings.ollama_base_url)
+            raise LocalMindError(f"{model}: {friendly.error}", hint=friendly.hint) from exc
 
     def _comparison_url(self, dataset_id: str | None, experiments: list[dict]) -> str | None:
         """LangSmith's side-by-side view of all experiments of this run."""
