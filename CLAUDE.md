@@ -61,6 +61,7 @@ src/localmind/
   db/          models.py, session.py, repositories.py
   api/         main.py, routes/*.py, schemas.py
   ui/          Home.py + pages/*.py, api_client.py
+  bootstrap.py   composition root (settings -> db -> services)
   exceptions.py
 scripts/       basic_chat.py (assignment), pull/seed helpers
 tests/         pytest, LLM calls mocked (no Ollama needed in CI)
@@ -111,6 +112,8 @@ Each phase ends with: code runs, tests pass, a summary, a manual test list
 pip install -e ".[dev]"
 cp .env.example .env          # add LANGSMITH_API_KEY
 ollama pull llama3.2
-python scripts/basic_chat.py
+python scripts/check_setup.py   # Ollama + LangSmith diagnostics
+python scripts/basic_chat.py    # assignment script
+python scripts/chat_cli.py --persona Tutor   # terminal chat on ChatService
 pytest
 ```
