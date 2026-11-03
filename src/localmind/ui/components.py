@@ -192,7 +192,14 @@ def model_colors(models: list[str]) -> alt.Scale:
     return alt.Scale(domain=domain, range=palette()[: len(domain)])
 
 
-def bar(df: pd.DataFrame, x: str, y: str, title: str, fmt: str = ",.1f") -> alt.Chart:
+def bar(
+    df: pd.DataFrame,
+    x: str,
+    y: str,
+    title: str,
+    fmt: str = ",.1f",
+    domain: tuple[float, float] | None = None,
+) -> alt.Chart:
     """Horizontal single-series bar chart (the axis names each bar, so one colour).
 
     Height is a per-row *step*, not pixels: a fixed pixel height gets squashed
@@ -204,12 +211,22 @@ def bar(df: pd.DataFrame, x: str, y: str, title: str, fmt: str = ",.1f") -> alt.
         alt.Chart(df, title=title)
         .mark_bar(cornerRadiusEnd=4, color=palette()[0])
         .encode(
-            x=alt.X(f"{x}:Q", title=None, axis=axis),
+            x=alt.X(
+                f"{x}:Q",
+                title=None,
+                axis=axis,
+                scale=alt.Scale(domain=list(domain)) if domain else alt.Undefined,
+            ),
             y=alt.Y(f"{y}:N", title=None, sort="-x", scale=alt.Scale(paddingInner=0.35)),
             tooltip=[alt.Tooltip(f"{y}:N"), alt.Tooltip(f"{x}:Q", format=fmt)],
         )
         .properties(height=alt.Step(30))
     )
+
+
+def md_safe(text: str) -> str:
+    """Escape ``$`` so prices like "$1.10 ... $1.00" aren't rendered as LaTeX math."""
+    return text.replace("$", r"\$")
 
 
 def plural(n: int, word: str) -> str:

@@ -9,7 +9,7 @@ from streamlit.testing.v1 import AppTest
 
 from localmind.ui.api_client import APIClient, APIError, parse_sse
 
-PAGES = sorted((Path(__file__).parents[1] / "src/localmind/ui/pages").glob("*.py"))
+PAGES = sorted((Path(__file__).parents[1] / "src/localmind/ui/views").glob("*.py"))
 
 
 def test_parse_sse() -> None:

@@ -118,5 +118,10 @@ make dev                       # API on :8000 (docs at /docs) + UI on :8501
 make check                     # ruff + pytest (no Ollama needed)
 ```
 
+Evaluation: `python scripts/run_eval.py [--per-category 1] [--local] [--judge MODEL]`
+writes `eval/results/<run_id>_{examples,summary}.csv` + `_meta.json` (with hardware);
+the Evaluation page reads them. Never hand-edit numbers into the README; copy them
+from a real run's summary CSV.
+
 Terminal tools for quick manual tests: `scripts/chat_cli.py`, `arena_cli.py`,
 `agent_cli.py`, `docs_cli.py`.

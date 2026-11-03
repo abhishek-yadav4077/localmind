@@ -12,7 +12,9 @@ from localmind.ui.components import sidebar_status
 
 st.set_page_config(page_title="LocalMind", page_icon="🧠", layout="wide")
 
-PAGES = Path(__file__).parent / "pages"
+# Not named "pages/": Streamlit would auto-discover that folder and briefly show
+# its own file-based menu before st.navigation takes over.
+PAGES = Path(__file__).parent / "views"
 
 nav = st.navigation(
     {
