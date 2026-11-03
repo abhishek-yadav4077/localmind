@@ -1,0 +1,6 @@
+# Normalise line endings so a Windows checkout (CRLF) doesn't fail CI's
+# `ruff format --check` or break the Docker build.
+* text=auto eol=lf
+*.png binary
+*.gif binary
+*.pdf binary

@@ -293,3 +293,12 @@ def test_load_run_rejects_unknown_and_traversal(tmp_path) -> None:
     with pytest.raises(NotFoundError):
         load_run(tmp_path, "../etc")
     assert list_runs(tmp_path / "missing") == []
+
+
+def test_hardware_ram_on_windows_falls_back_safely(monkeypatch) -> None:
+    from localmind.evaluation import hardware
+
+    monkeypatch.setattr(hardware.platform, "system", lambda: "Windows")
+    # On Linux CI there is no ctypes.windll: must return None, not crash.
+    assert hardware.ram_gb() is None
+    assert set(hardware.describe_hardware()) >= {"cpu", "ram_gb", "gpu", "os"}

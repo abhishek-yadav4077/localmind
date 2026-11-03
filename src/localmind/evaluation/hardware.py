@@ -37,9 +37,38 @@ def cpu_name() -> str:
 
 
 def ram_gb() -> float | None:
+    if platform.system() == "Windows":
+        return _windows_ram_gb()
     try:
         return round(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1024**3, 1)
-    except (ValueError, OSError, AttributeError):  # Windows has no sysconf
+    except (ValueError, OSError, AttributeError):
+        return None
+
+
+def _windows_ram_gb() -> float | None:
+    """Total RAM via the Win32 GlobalMemoryStatusEx call (Windows has no sysconf)."""
+    import ctypes
+
+    class MemoryStatus(ctypes.Structure):
+        _fields_ = [
+            ("dwLength", ctypes.c_ulong),
+            ("dwMemoryLoad", ctypes.c_ulong),
+            ("ullTotalPhys", ctypes.c_ulonglong),
+            ("ullAvailPhys", ctypes.c_ulonglong),
+            ("ullTotalPageFile", ctypes.c_ulonglong),
+            ("ullAvailPageFile", ctypes.c_ulonglong),
+            ("ullTotalVirtual", ctypes.c_ulonglong),
+            ("ullAvailVirtual", ctypes.c_ulonglong),
+            ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+        ]
+
+    try:
+        status = MemoryStatus()
+        status.dwLength = ctypes.sizeof(MemoryStatus)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):  # type: ignore[attr-defined]
+            return None
+        return round(status.ullTotalPhys / 1024**3, 1)
+    except (AttributeError, OSError):
         return None
 
 

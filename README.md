@@ -108,6 +108,20 @@ make dev                                              # API â†’ :8000/docs, UI â
 
 `make dev` runs `uvicorn localmind.api.main:app` and
 `streamlit run src/localmind/ui/app.py`; run them in two terminals if you don't have `make`.
+
+**Windows (PowerShell):**
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1          # if blocked: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+pip install -e ".[dev]"
+copy .env.example .env
+uvicorn localmind.api.main:app --port 8000          # terminal 1
+streamlit run src/localmind/ui/app.py               # terminal 2 (activate the venv there too)
+```
+
+**8 GB RAM:** use `llama3.2` and `qwen2.5:3b` (+ `llama3.2:1b` as a third arena model) and
+skip `mistral` (7B); run the arena in sequential mode.
 Minimal install without document chat: `pip install -e .` (add `".[rag]"` / `".[web]"` later).
 
 ## Docker
