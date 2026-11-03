@@ -28,7 +28,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.8"]
+# Document chat is optional: chromadb is a heavy dependency.
+rag = ["langchain-chroma>=1.1,<2", "pypdf>=6.0", "langchain-text-splitters>=1.1"]
+# Web search for the agent (the only online feature, off by default in the UI).
+web = ["ddgs>=9.0"]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.8", "localmind[rag,web]"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/localmind"]

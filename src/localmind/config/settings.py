@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     ollama_timeout_s: float = Field(default=120.0, gt=0)
     ollama_max_retries: int = Field(default=3, ge=1, le=10)
 
+    # --- Document chat (RAG) ---------------------------------------------
+    chroma_dir: str = "data/chroma"
+    rag_chunk_size: int = Field(default=1000, ge=100)
+    rag_chunk_overlap: int = Field(default=150, ge=0)
+    rag_top_k: int = Field(default=4, ge=1, le=20)
+    rag_max_upload_mb: int = Field(default=20, ge=1)
+
     # --- App --------------------------------------------------------------
     database_url: str = "sqlite:///data/localmind.db"
     log_level: str = "INFO"
