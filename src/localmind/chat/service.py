@@ -19,10 +19,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Sequence
 from typing import Any, Literal
 
-import httpx
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessageChunk, BaseMessage, HumanMessage, SystemMessage
-from ollama import ResponseError
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from localmind.chat import export
 from localmind.chat.schemas import (
@@ -35,14 +33,14 @@ from localmind.chat.schemas import (
     TitleEvent,
     TokenEvent,
 )
-from localmind.chat.stats import StreamTimer, compute_stats
+from localmind.chat.streaming import CompletionStream
 from localmind.chat.titles import generate_title
 from localmind.config import Settings, get_logger, get_settings
 from localmind.db import Database
 from localmind.db import repositories as repo
 from localmind.exceptions import LocalMindError
 from localmind.llm import ModelParams, get_chat_model
-from localmind.llm.ollama_client import install_hint
+from localmind.llm.errors import describe_ollama_error
 from localmind.memory import MemoryManager, MemoryPolicy
 from localmind.memory.summarizer import db_role_to_message, summary_message
 from localmind.tracing import Tracer, child_config, disabled_tracer, merge_configs
@@ -235,28 +233,15 @@ class ChatService:
                 yield MemoryEvent(summarized_messages=len(older))
 
         # 4. Stream the reply.
-        llm = self.llm_factory(model, params)
-        timer = StreamTimer()
-        full: AIMessageChunk | None = None
-        timer.begin()
+        stream = CompletionStream(self.llm_factory(model, params), prompt, config)
         try:
-            for chunk in llm.stream(prompt, config=config):
-                text = chunk.content if isinstance(chunk.content, str) else ""
-                timer.on_token(text)
-                full = chunk if full is None else full + chunk
-                if text:
-                    yield TokenEvent(content=text)
-        except Exception as exc:
+            for text in stream:
+                yield TokenEvent(content=text)
+        except Exception as exc:  # mapped to a user-facing error event
             yield self._error_event(exc, model)
             return
-        timer.finish()
-
-        answer = str(full.content) if full is not None else ""
-        stats = compute_stats(
-            timer,
-            full.response_metadata if full is not None else None,
-            dict(full.usage_metadata) if full is not None and full.usage_metadata else None,
-        )
+        assert stream.result is not None
+        answer, stats = stream.result.text, stream.result.stats
 
         # 5. Persist assistant message.
         with self.db.session() as s:
@@ -315,21 +300,9 @@ class ChatService:
         return prompt
 
     def _error_event(self, exc: Exception, model: str) -> ErrorEvent:
-        if isinstance(exc, httpx.ConnectError | ConnectionError):
-            return ErrorEvent(
-                error="Ollama is not reachable", hint=install_hint(self.settings.ollama_base_url)
-            )
-        if isinstance(exc, ResponseError) and exc.status_code == 404:
-            return ErrorEvent(
-                error=f"Model '{model}' is not installed", hint=f"Run: ollama pull {model}"
-            )
-        if isinstance(exc, httpx.TimeoutException):
-            return ErrorEvent(
-                error="Ollama timed out",
-                hint="The model may still be loading; retry, or raise LOCALMIND_OLLAMA_TIMEOUT_S",
-            )
-        logger.exception("chat stream failed", extra={"model": model})
-        return ErrorEvent(error=f"{type(exc).__name__}: {exc}")
+        friendly = describe_ollama_error(exc, model, self.settings.ollama_base_url)
+        logger.warning("chat stream failed", extra={"model": model, "error": friendly.error})
+        return ErrorEvent(error=friendly.error, hint=friendly.hint)
 
     @staticmethod
     def _require(session, conversation_id: str):
