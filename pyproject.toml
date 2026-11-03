@@ -49,5 +49,5 @@ target-version = "py311"
 src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+select = ["E", "F", "W", "I", "B", "BLE", "UP", "SIM", "RUF"]
 ignore = ["RUF001", "RUF002", "RUF003"]

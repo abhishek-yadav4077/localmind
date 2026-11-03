@@ -147,7 +147,7 @@ class RagService:
                         conversation_id=conversation_id, sources=_citations(retrieved)
                     )
                 yield TokenEvent(content=token)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - surfaced to the UI as an error event
             friendly = describe_ollama_error(exc, model, self.settings.ollama_base_url)
             yield ErrorEvent(error=friendly.error, hint=friendly.hint)
             return

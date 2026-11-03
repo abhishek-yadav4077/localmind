@@ -52,7 +52,7 @@ def generate_title(
             config={"run_name": "generate_title", **(config or {})},
         )
         title = clean_title(raw)
-    except Exception:
+    except Exception:  # titles are cosmetic: log and fall back
         logger.warning("title generation failed", exc_info=True)
         title = ""
     return title or fallback_title(question)

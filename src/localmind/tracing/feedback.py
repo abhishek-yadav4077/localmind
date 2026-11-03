@@ -74,7 +74,7 @@ class FeedbackService:
 
         try:
             new_ls_id = self.tracer.send_feedback(run_id, score, comment, feedback_id=ls_id)
-        except Exception as exc:
+        except Exception as exc:  # keep the local vote, report the sync error
             logger.warning("feedback sync failed", extra={"message_id": message_id}, exc_info=True)
             out.sync_error = str(exc)
             return out

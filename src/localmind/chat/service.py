@@ -237,7 +237,7 @@ class ChatService:
         try:
             for text in stream:
                 yield TokenEvent(content=text)
-        except Exception as exc:  # mapped to a user-facing error event
+        except Exception as exc:  # noqa: BLE001 - mapped to a user-facing error event
             yield self._error_event(exc, model)
             return
         assert stream.result is not None

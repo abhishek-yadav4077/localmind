@@ -141,7 +141,7 @@ class ArenaService:
                         return
                     events.put(ArenaTokenEvent(model=model, content=token))
                 done.result = stream.result
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - reported per model; others continue
                 done.error = exc
             events.put(done)
 
@@ -230,7 +230,7 @@ class ArenaService:
                 new_id = self.tracer.send_feedback(
                     run_id, score, feedback_id=fb_id, key=ARENA_FEEDBACK_KEY
                 )
-            except Exception:
+            except Exception:  # LangSmith is best effort; the local vote is what matters
                 logger.warning("arena feedback sync failed", exc_info=True)
                 continue
             if new_id and new_id != fb_id:

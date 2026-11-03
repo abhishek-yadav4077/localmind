@@ -8,6 +8,7 @@ checks and the app behaves identically without LangSmith.
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 from typing import Any
 
@@ -20,6 +21,7 @@ from localmind.tracing.metadata import Mode, build_run_config
 logger = get_logger(__name__)
 
 FEEDBACK_KEY = "user-score"
+LOOKUP_RETRY_S = 60.0  # after a failed project lookup, don't retry on every request
 
 
 class Tracer:
@@ -35,6 +37,7 @@ class Tracer:
         self.settings = settings or get_settings()
         self.client = status.client if status.enabled else None
         self._ids: tuple[str, str] | None = None  # (tenant_id, project_id), cached
+        self._failed_at: float | None = None
         self._lock = threading.Lock()
 
     @property
@@ -78,11 +81,14 @@ class Tracer:
     def _resolve_ids(self) -> tuple[str, str] | None:
         """Look up (tenant_id, project_id) once. Creates the project if needed.
 
-        One network call for the whole process instead of one per message; on
-        failure we return None and try again next time (not cached).
+        One network call for the whole process instead of one per message. On
+        failure we return None and only retry after ``LOOKUP_RETRY_S``, so a page
+        listing 50 messages doesn't make 50 failing network calls.
         """
         if self._ids is not None or self.client is None:
             return self._ids
+        if self._failed_at and time.monotonic() - self._failed_at < LOOKUP_RETRY_S:
+            return None
         with self._lock:
             if self._ids is not None:
                 return self._ids
@@ -95,8 +101,9 @@ class Tracer:
                     # so links work even before that trace has been ingested.
                     project = self.client.create_project(name)
                 self._ids = (str(project.tenant_id), str(project.id))
-            except Exception:
+            except Exception:  # trace links are a nice-to-have; never break a request
                 logger.warning("could not resolve LangSmith project ids", exc_info=True)
+                self._failed_at = time.monotonic()
                 return None
         return self._ids
 
@@ -143,7 +150,7 @@ class Tracer:
         if self.client is not None:
             try:
                 self.client.flush()
-            except Exception:
+            except Exception:  # never fail a script's exit because of tracing
                 logger.warning("langsmith flush failed", exc_info=True)
 
 

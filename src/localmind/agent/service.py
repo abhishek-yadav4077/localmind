@@ -170,7 +170,7 @@ class AgentService:
                 hint="Rephrase the question or try a larger model (e.g. qwen2.5:7b)",
             )
             return
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - any model/graph failure becomes an error event
             friendly = describe_ollama_error(exc, model, self.settings.ollama_base_url)
             logger.warning("agent run failed", extra={"model": model, "error": friendly.error})
             yield ErrorEvent(error=friendly.error, hint=friendly.hint)

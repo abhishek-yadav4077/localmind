@@ -156,7 +156,7 @@ def web_search(query: str) -> str:
         from ddgs import DDGS  # imported lazily: only needed when web search is enabled
 
         results = DDGS().text(query, max_results=5)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - network errors go back to the model as text
         return f"Error: web search failed ({type(exc).__name__}: {exc})"
     if not results:
         return f"No web results for {query!r}."

@@ -62,12 +62,17 @@ def test_project_created_when_missing() -> None:
     client.create_project.assert_called_once_with("localmind")
 
 
-def test_lookup_failure_returns_none_and_retries_later() -> None:
+def test_lookup_failure_backs_off_then_retries(monkeypatch) -> None:
+    import localmind.tracing.tracer as tracer_mod
+
     client = fake_client()
     client.read_project.side_effect = [ConnectionError("down"), client.read_project.return_value]
     tracer = enabled_tracer(client)
     assert tracer.run_url("r1") is None
-    assert tracer.run_url("r1") is not None
+    assert tracer.run_url("r2") is None  # inside the backoff window: no second call
+    assert client.read_project.call_count == 1
+    monkeypatch.setattr(tracer_mod, "LOOKUP_RETRY_S", 0.0)
+    assert tracer.run_url("r3") is not None
 
 
 def test_feedback_create_then_update() -> None:
