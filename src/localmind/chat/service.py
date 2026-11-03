@@ -1,0 +1,322 @@
+"""ChatService: the use-case layer for chatting.
+
+One user turn, in order:
+
+1. persist the user message
+2. build the prompt: persona system prompt + memory summary + recent turns
+3. if the prompt nears the context window, fold old turns into the summary
+4. stream the reply from Ollama, timing it
+5. persist the assistant message with stats
+6. on the first exchange, generate a title
+
+The service is synchronous on purpose: SQLite and Ollama's client are sync, and
+FastAPI runs sync generators in a thread pool, so async would add complexity
+without a throughput benefit for a single-user local app.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Iterator, Sequence
+from typing import Any, Literal
+
+import httpx
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessageChunk, BaseMessage, HumanMessage, SystemMessage
+from ollama import ResponseError
+
+from localmind.chat import export
+from localmind.chat.schemas import (
+    ChatEvent,
+    ConversationOut,
+    DoneEvent,
+    ErrorEvent,
+    MemoryEvent,
+    MessageOut,
+    TitleEvent,
+    TokenEvent,
+)
+from localmind.chat.stats import StreamTimer, compute_stats
+from localmind.chat.titles import generate_title
+from localmind.config import Settings, get_logger, get_settings
+from localmind.db import Database
+from localmind.db import repositories as repo
+from localmind.exceptions import LocalMindError
+from localmind.llm import ModelParams, get_chat_model
+from localmind.llm.ollama_client import install_hint
+from localmind.memory import MemoryManager, MemoryPolicy
+from localmind.memory.summarizer import db_role_to_message, summary_message
+
+logger = get_logger(__name__)
+
+LLMFactory = Callable[[str, ModelParams], BaseChatModel]
+
+
+class ConversationNotFoundError(LocalMindError):
+    """No conversation with that id."""
+
+
+class ChatService:
+    """Conversation CRUD and streaming chat.
+
+    Args:
+        db: Database handle.
+        settings: App settings.
+        llm_factory: ``(model, params) -> BaseChatModel``. Injected so tests can
+            pass fake models and never need a running Ollama.
+        memory_policy: Summarization thresholds.
+    """
+
+    def __init__(
+        self,
+        db: Database,
+        settings: Settings | None = None,
+        llm_factory: LLMFactory | None = None,
+        memory_policy: MemoryPolicy | None = None,
+    ) -> None:
+        self.db = db
+        self.settings = settings or get_settings()
+        self.llm_factory: LLMFactory = llm_factory or (
+            lambda model, params: get_chat_model(model, params, self.settings)
+        )
+        self.memory_policy = memory_policy or MemoryPolicy()
+
+    # ------------------------------------------------------------------ CRUD
+    def create_conversation(
+        self,
+        model: str | None = None,
+        persona_id: int | None = None,
+        params: ModelParams | None = None,
+        title: str = "New chat",
+    ) -> ConversationOut:
+        with self.db.session() as s:
+            conv = repo.create_conversation(
+                s,
+                model=model or self.settings.default_model,
+                persona_id=persona_id,
+                params=(params or ModelParams()).model_dump(),
+                title=title,
+            )
+            return ConversationOut.model_validate(conv)
+
+    def get_conversation(self, conversation_id: str) -> ConversationOut:
+        with self.db.session() as s:
+            return ConversationOut.model_validate(self._require(s, conversation_id))
+
+    def list_conversations(
+        self, query: str | None = None, limit: int = 100
+    ) -> list[ConversationOut]:
+        with self.db.session() as s:
+            return [
+                ConversationOut.model_validate(c) for c in repo.list_conversations(s, query, limit)
+            ]
+
+    def update_conversation(
+        self,
+        conversation_id: str,
+        *,
+        title: str | None = None,
+        model: str | None = None,
+        persona_id: int | Literal["unset"] | None = "unset",
+        params: ModelParams | None = None,
+    ) -> ConversationOut:
+        """Rename, switch model/persona or change params mid-conversation.
+
+        ``persona_id`` uses a sentinel because ``None`` is meaningful ("no persona").
+        """
+        with self.db.session() as s:
+            conv = self._require(s, conversation_id)
+            if title is not None:
+                conv.title = title.strip()[:200] or conv.title
+                conv.title_generated = True  # a manual rename wins over auto-titles
+            if model is not None:
+                conv.model = model
+            if persona_id != "unset":
+                conv.persona_id = persona_id
+            if params is not None:
+                conv.params = params.model_dump()
+            s.flush()
+            return ConversationOut.model_validate(conv)
+
+    def delete_conversation(self, conversation_id: str) -> None:
+        with self.db.session() as s:
+            if not repo.delete_conversation(s, conversation_id):
+                raise ConversationNotFoundError(f"Conversation {conversation_id} not found")
+
+    def get_messages(self, conversation_id: str) -> list[MessageOut]:
+        with self.db.session() as s:
+            self._require(s, conversation_id)
+            return [MessageOut.model_validate(m) for m in repo.list_messages(s, conversation_id)]
+
+    def export(self, conversation_id: str, fmt: Literal["markdown", "json"]) -> str:
+        with self.db.session() as s:
+            conv = self._require(s, conversation_id)
+            persona_name = conv.persona.name if conv.persona else None
+            conv_out = ConversationOut.model_validate(conv)
+        messages = self.get_messages(conversation_id)
+        if fmt == "markdown":
+            return export.to_markdown(conv_out, messages, persona_name)
+        return export.to_json(conv_out, messages)
+
+    # ------------------------------------------------------------------ chat
+    def stream_reply(
+        self,
+        conversation_id: str,
+        user_text: str,
+        run_config: dict[str, Any] | None = None,
+    ) -> Iterator[ChatEvent]:
+        """Run one user turn, yielding events as they happen.
+
+        Errors from Ollama are yielded as ``ErrorEvent`` (not raised) so a
+        streaming HTTP response can report them to the UI cleanly.
+
+        Args:
+            conversation_id: Target conversation.
+            user_text: The user's message.
+            run_config: Extra LangChain ``RunnableConfig`` (tags/metadata/callbacks).
+        """
+        user_text = user_text.strip()
+        if not user_text:
+            yield ErrorEvent(error="Message is empty")
+            return
+
+        # 1-2. Persist user message, load everything we need, then release the session:
+        # never hold a DB session open across a multi-second LLM stream.
+        with self.db.session() as s:
+            conv = self._require(s, conversation_id)
+            repo.add_message(s, conv.id, "user", user_text)
+            model, params = conv.model, ModelParams(**(conv.params or {}))
+            persona_prompt = conv.persona.system_prompt if conv.persona else None
+            summary, summarized_up_to = conv.summary, conv.summarized_up_to
+            needs_title = not conv.title_generated
+            rows = repo.list_messages(s, conv.id, after_id=summarized_up_to)
+            history = [(m.id, db_role_to_message(m.role, m.content)) for m in rows]
+
+        config: dict[str, Any] = {"run_name": "chat", **(run_config or {})}
+
+        # 3. Memory: summarize old turns if the prompt is getting too big.
+        memory_summarized = False
+        prompt = self._build_prompt(persona_prompt, summary, [m for _, m in history])
+        memory = MemoryManager(lambda: self.llm_factory(model, params), self.memory_policy)
+        # The new user message (last item) must always stay verbatim.
+        if memory.needs_summary(prompt, len(history) - 1, params.num_ctx, params.max_tokens):
+            older, recent = memory.split(history[:-1])
+            try:
+                summary = memory.summarize(summary, [m for _, m in older], config=_child(config))
+            except Exception as exc:
+                logger.warning("memory summarization failed", exc_info=True)
+                yield ErrorEvent(error=f"Memory summarization failed: {exc}")
+            else:
+                summarized_up_to = older[-1][0]
+                history = [*recent, history[-1]]
+                prompt = self._build_prompt(persona_prompt, summary, [m for _, m in history])
+                with self.db.session() as s:
+                    conv = self._require(s, conversation_id)
+                    conv.summary, conv.summarized_up_to = summary, summarized_up_to
+                memory_summarized = True
+                yield MemoryEvent(summarized_messages=len(older))
+
+        # 4. Stream the reply.
+        llm = self.llm_factory(model, params)
+        timer = StreamTimer()
+        full: AIMessageChunk | None = None
+        timer.begin()
+        try:
+            for chunk in llm.stream(prompt, config=config):
+                text = chunk.content if isinstance(chunk.content, str) else ""
+                timer.on_token(text)
+                full = chunk if full is None else full + chunk
+                if text:
+                    yield TokenEvent(content=text)
+        except Exception as exc:
+            yield self._error_event(exc, model)
+            return
+        timer.finish()
+
+        answer = str(full.content) if full is not None else ""
+        stats = compute_stats(
+            timer,
+            full.response_metadata if full is not None else None,
+            dict(full.usage_metadata) if full is not None and full.usage_metadata else None,
+        )
+
+        # 5. Persist assistant message.
+        with self.db.session() as s:
+            conv = self._require(s, conversation_id)
+            msg = repo.add_message(
+                s,
+                conv.id,
+                "assistant",
+                answer,
+                model=model,
+                memory_summarized=memory_summarized,
+                **stats.model_dump(),
+            )
+            repo.touch_conversation(s, conv)
+            done = DoneEvent(message=MessageOut.model_validate(msg))
+        yield done
+
+        # 6. Title after the first exchange (after "done" so it never delays the answer).
+        if needs_title:
+            title_llm = self.llm_factory(
+                model, ModelParams(temperature=0.2, max_tokens=24, num_ctx=2048)
+            )
+            title = generate_title(title_llm, user_text, answer, config=_child(config))
+            with self.db.session() as s:
+                conv = self._require(s, conversation_id)
+                conv.title, conv.title_generated = title, True
+            yield TitleEvent(title=title)
+
+    def reply(self, conversation_id: str, user_text: str, **kwargs: Any) -> MessageOut:
+        """Non-streaming convenience wrapper (scripts, tests). Raises on error."""
+        result: MessageOut | None = None
+        for event in self.stream_reply(conversation_id, user_text, **kwargs):
+            if isinstance(event, ErrorEvent) and result is None:
+                raise LocalMindError(event.error, hint=event.hint)
+            if isinstance(event, DoneEvent):
+                result = event.message
+        assert result is not None
+        return result
+
+    # ------------------------------------------------------------------ helpers
+    @staticmethod
+    def _build_prompt(
+        persona_prompt: str | None, summary: str | None, history: Sequence[BaseMessage]
+    ) -> list[BaseMessage]:
+        prompt: list[BaseMessage] = []
+        if persona_prompt:
+            prompt.append(SystemMessage(content=persona_prompt))
+        if summary:
+            prompt.append(summary_message(summary))
+        prompt.extend(history)
+        if not prompt or not isinstance(prompt[-1], HumanMessage):  # pragma: no cover
+            raise LocalMindError("Prompt must end with the user's message")
+        return prompt
+
+    def _error_event(self, exc: Exception, model: str) -> ErrorEvent:
+        if isinstance(exc, httpx.ConnectError | ConnectionError):
+            return ErrorEvent(
+                error="Ollama is not reachable", hint=install_hint(self.settings.ollama_base_url)
+            )
+        if isinstance(exc, ResponseError) and exc.status_code == 404:
+            return ErrorEvent(
+                error=f"Model '{model}' is not installed", hint=f"Run: ollama pull {model}"
+            )
+        if isinstance(exc, httpx.TimeoutException):
+            return ErrorEvent(
+                error="Ollama timed out",
+                hint="The model may still be loading; retry, or raise LOCALMIND_OLLAMA_TIMEOUT_S",
+            )
+        logger.exception("chat stream failed", extra={"model": model})
+        return ErrorEvent(error=f"{type(exc).__name__}: {exc}")
+
+    @staticmethod
+    def _require(session, conversation_id: str):
+        conv = repo.get_conversation(session, conversation_id)
+        if conv is None:
+            raise ConversationNotFoundError(f"Conversation {conversation_id} not found")
+        return conv
+
+
+def _child(config: dict[str, Any]) -> dict[str, Any]:
+    """Config for helper runs (summary/title): same tags/metadata, own run name."""
+    return {k: v for k, v in config.items() if k != "run_name"}
