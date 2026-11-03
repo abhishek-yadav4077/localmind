@@ -38,7 +38,7 @@ from localmind.chat.titles import generate_title
 from localmind.config import Settings, get_logger, get_settings
 from localmind.db import Database
 from localmind.db import repositories as repo
-from localmind.exceptions import LocalMindError
+from localmind.exceptions import LocalMindError, NotFoundError
 from localmind.llm import ModelParams, get_chat_model
 from localmind.llm.errors import describe_ollama_error
 from localmind.memory import MemoryManager, MemoryPolicy
@@ -50,7 +50,7 @@ logger = get_logger(__name__)
 LLMFactory = Callable[[str, ModelParams], BaseChatModel]
 
 
-class ConversationNotFoundError(LocalMindError):
+class ConversationNotFoundError(NotFoundError):
     """No conversation with that id."""
 
 

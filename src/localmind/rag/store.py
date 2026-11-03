@@ -25,7 +25,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 from localmind.config import Settings, get_logger, get_settings
-from localmind.exceptions import LocalMindError
+from localmind.exceptions import FeatureUnavailableError, LocalMindError
 from localmind.rag.loaders import load_bytes
 from localmind.tracing.metadata import slug
 
@@ -38,7 +38,7 @@ def _require_rag_deps() -> None:
         import langchain_chroma  # noqa: F401
         import langchain_text_splitters  # noqa: F401
     except ImportError as exc:
-        raise LocalMindError(
+        raise FeatureUnavailableError(
             "Document chat dependencies are not installed",
             hint='Run: pip install -e ".[rag]"',
         ) from exc

@@ -11,13 +11,13 @@ from sqlalchemy import select
 
 from localmind.config import get_logger
 from localmind.db import Database, Feedback, Message
-from localmind.exceptions import LocalMindError
+from localmind.exceptions import LocalMindError, NotFoundError
 from localmind.tracing.tracer import Tracer
 
 logger = get_logger(__name__)
 
 
-class MessageNotFoundError(LocalMindError):
+class MessageNotFoundError(NotFoundError):
     """No message with that id."""
 
 

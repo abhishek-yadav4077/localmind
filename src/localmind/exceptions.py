@@ -37,9 +37,17 @@ class OllamaUnavailableError(OllamaError):
     """The Ollama server could not be reached."""
 
 
-class ModelNotFoundError(OllamaError):
+class ModelNotFoundError(OllamaError):  # see also NotFoundError mapping in the API
     """The requested model is not installed in Ollama."""
 
 
 class ModelPullError(OllamaError):
     """Pulling a model from the Ollama registry failed."""
+
+
+class NotFoundError(LocalMindError):
+    """A requested resource does not exist (mapped to HTTP 404)."""
+
+
+class FeatureUnavailableError(LocalMindError):
+    """An optional feature's dependencies are not installed (HTTP 501)."""

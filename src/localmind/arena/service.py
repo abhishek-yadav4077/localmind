@@ -39,7 +39,7 @@ from localmind.chat.streaming import CompletionStream, StreamResult
 from localmind.config import Settings, get_logger, get_settings
 from localmind.db import ArenaBattle, ArenaResponse, Database, Persona
 from localmind.db.models import utcnow
-from localmind.exceptions import LocalMindError
+from localmind.exceptions import LocalMindError, NotFoundError
 from localmind.llm import ModelParams, get_chat_model
 from localmind.llm.errors import describe_ollama_error
 from localmind.tracing import Tracer, disabled_tracer
@@ -51,7 +51,7 @@ MIN_MODELS, MAX_MODELS = 2, 3
 ARENA_FEEDBACK_KEY = "arena-win"
 
 
-class BattleNotFoundError(LocalMindError):
+class BattleNotFoundError(NotFoundError):
     """No battle with that id."""
 
 

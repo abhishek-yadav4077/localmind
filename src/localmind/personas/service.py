@@ -7,13 +7,13 @@ from collections.abc import Sequence
 from localmind.config import get_logger
 from localmind.db import Database, Persona
 from localmind.db import repositories as repo
-from localmind.exceptions import LocalMindError
+from localmind.exceptions import NotFoundError
 from localmind.personas.defaults import DEFAULT_PERSONAS
 
 logger = get_logger(__name__)
 
 
-class PersonaNotFoundError(LocalMindError):
+class PersonaNotFoundError(NotFoundError):
     """No persona with that id."""
 
 

@@ -14,6 +14,7 @@ from localmind.arena import ArenaService
 from localmind.chat import ChatService
 from localmind.config import Settings, configure_logging, get_settings
 from localmind.db import Database
+from localmind.llm import OllamaClient
 from localmind.personas import PersonaService
 from localmind.tracing import Tracer, TracingStatus, init_tracing
 from localmind.tracing.feedback import FeedbackService
@@ -35,6 +36,7 @@ class AppContext:
     feedback: FeedbackService
     arena: ArenaService
     agent: AgentService
+    ollama: OllamaClient
     _rag: RagService | None = field(default=None, repr=False)
 
     def rag(self) -> RagService:
@@ -71,4 +73,5 @@ def build_context(settings: Settings | None = None) -> AppContext:
         feedback=FeedbackService(db, tracer),
         arena=ArenaService(db, settings, tracer=tracer),
         agent=AgentService(db, settings, tracer=tracer),
+        ollama=OllamaClient(settings),
     )
