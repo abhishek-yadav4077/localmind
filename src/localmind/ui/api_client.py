@@ -37,9 +37,14 @@ def _raise_for(response: httpx.Response) -> None:
 class APIClient:
     """Typed-enough wrapper over the REST + SSE endpoints."""
 
-    def __init__(self, base_url: str | None = None, timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        base_url: str | None = None,
+        timeout: float = 30.0,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         self.base_url = (base_url or os.getenv("LOCALMIND_API_URL", DEFAULT_API_URL)).rstrip("/")
-        self._http = httpx.Client(base_url=self.base_url, timeout=timeout)
+        self._http = httpx.Client(base_url=self.base_url, timeout=timeout, transport=transport)
 
     def _call(self, method: str, path: str, **kwargs: Any) -> Any:
         try:
