@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
-from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessageChunk, BaseMessage
+from langchain_core.messages import AIMessageChunk
+from langchain_core.runnables import Runnable
 
 from localmind.chat.schemas import MessageStats
 from localmind.chat.stats import StreamTimer, compute_stats
@@ -29,17 +29,21 @@ class CompletionStream:
             print(token, end="")
         print(stream.result.stats.tokens_per_sec)
 
+    ``runnable`` is usually a chat model with a message list as ``input``, but
+    any runnable that streams ``AIMessageChunk``s works (e.g. ``prompt | llm``),
+    which lets RAG trace retrieval + generation as one run.
+
     Exceptions from the model propagate to the caller unchanged.
     """
 
     def __init__(
         self,
-        llm: BaseChatModel,
-        messages: Sequence[BaseMessage],
+        runnable: Runnable,
+        input: Any,
         config: dict[str, Any] | None = None,
     ) -> None:
-        self.llm = llm
-        self.messages = list(messages)
+        self.runnable = runnable
+        self.input = input
         self.config = config or {}
         self.result: StreamResult | None = None
 
@@ -47,7 +51,7 @@ class CompletionStream:
         timer = StreamTimer()
         full: AIMessageChunk | None = None
         timer.begin()
-        for chunk in self.llm.stream(self.messages, config=self.config):
+        for chunk in self.runnable.stream(self.input, config=self.config):
             text = chunk.content if isinstance(chunk.content, str) else ""
             timer.on_token(text)
             # Adding chunks merges content *and* metadata; Ollama puts token
