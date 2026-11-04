@@ -155,6 +155,7 @@ on GitHub; you can always create a new one).
 
 | Problem | Fix |
 |---|---|
+| The app's terminal stays blank (even `[1/3] Ollama` doesn't appear) | The browser terminal is frozen, usually because your PC is low on memory. Run the app in the background instead: `nohup bash .devcontainer/run-app.sh > /tmp/app.log 2>&1 &`, watch with `tail -f /tmp/app.log`, open port 8501. Stop it with `pkill -f streamlit; pkill -f uvicorn`. Close other tabs/apps on your PC |
 | A command shows nothing at all (not even its first line) and Ctrl+C prints no error | The terminal itself is stuck, not the app: close it (🗑 trash icon in the terminal list) and open a new one with **+** |
 | `Could not reach Ollama` | `bash .devcontainer/start-ollama.sh` (Ollama doesn't restart by itself after the Codespace sleeps) |
 | A model is missing | `ollama pull <model>` |
