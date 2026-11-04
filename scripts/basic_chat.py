@@ -34,10 +34,17 @@ trace_config = {
     "metadata": {"model": args.model, "script": "basic_chat.py"},
 }
 
+# The first call loads the model into memory: on a CPU this can take a minute.
+print(f"Asking {args.model} (the first answer can take up to a minute while it loads)...\n")
+
 # 1) LLM wrapper: plain text in, plain text out (completion-style).
+# .stream() prints words as they arrive, so a slow CPU doesn't look frozen.
+# It's still one traced run in LangSmith, exactly like .invoke().
 llm = OllamaLLM(model=args.model, temperature=0.2)
 print("--- OllamaLLM (text completion) ---")
-print(llm.invoke(args.prompt, config=trace_config))
+for token in llm.stream(args.prompt, config=trace_config):
+    print(token, end="", flush=True)
+print()
 
 # 2) Chat model wrapper + LCEL chain: messages in, AIMessage out.
 prompt = ChatPromptTemplate.from_messages(
@@ -48,4 +55,6 @@ prompt = ChatPromptTemplate.from_messages(
 )
 chain = prompt | ChatOllama(model=args.model, temperature=0.2) | StrOutputParser()
 print("\n--- ChatOllama (chat model, LCEL chain) ---")
-print(chain.invoke({"question": args.prompt}, config=trace_config))
+for token in chain.stream({"question": args.prompt}, config=trace_config):
+    print(token, end="", flush=True)
+print()
