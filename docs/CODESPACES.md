@@ -94,24 +94,39 @@ To put them in the repo: in the Codespace's file Explorer (left), open
 
 ## 7. Evaluation (real benchmark numbers)
 
-Stop the app first (Ctrl+C) so the models have all the memory. Then:
+Stop the app first (Ctrl+C) so the models have all the CPU and memory.
 
+Run the evaluation **in the background with a log file**. The browser terminal can
+freeze on long-running output; a background job keeps going regardless, and even
+survives closing the terminal. (`-u` writes each line to the log immediately.)
+
+**Quick test** (5 questions per model):
 ```bash
-python scripts/run_eval.py --models llama3.2 llama3.2:1b --judge qwen2.5:3b --per-category 1
+nohup python -u scripts/run_eval.py --models llama3.2 llama3.2:1b --judge qwen2.5:3b --per-category 1 > /tmp/eval.log 2>&1 &
 ```
-That's a quick 5-question test. If it works, run the full 30 questions (it can
-take an hour or more on 2 CPU cores; keep the browser tab open):
+Watch it (Ctrl+C only stops *watching*, not the evaluation):
 ```bash
-python scripts/run_eval.py --models llama3.2 llama3.2:1b --judge qwen2.5:3b
+tail -f /tmp/eval.log
+```
+Other useful checks: `pgrep -af run_eval` (is it still running?) and `ollama ps`
+(which models are working). It's finished when the log shows `Done in … min`, a
+results table and a `LangSmith comparison:` link.
+
+**Full run** (30 questions per model), same way:
+```bash
+nohup python -u scripts/run_eval.py --models llama3.2 llama3.2:1b --judge qwen2.5:3b > /tmp/eval-full.log 2>&1 &
+```
+```bash
+tail -f /tmp/eval-full.log
 ```
 Then write the real results (and the Codespace's hardware) into the README:
 ```bash
 python scripts/benchmark_table.py --write
 ```
 
-> A Codespace stops after **30 minutes without activity** in the editor. During a
-> long evaluation, keep the tab open and move the mouse or type in the editor now
-> and then, or raise the idle timeout at <https://github.com/settings/codespaces>.
+> A Codespace stops after its **idle timeout** (30 minutes by default) without
+> activity in the editor. Raise it at <https://github.com/settings/codespaces>
+> (e.g. 240 minutes) before a long run, and keep the tab open.
 
 ## 8. Save your work to GitHub
 
