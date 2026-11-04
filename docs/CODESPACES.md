@@ -140,6 +140,7 @@ on GitHub; you can always create a new one).
 
 | Problem | Fix |
 |---|---|
+| A command shows nothing at all (not even its first line) and Ctrl+C prints no error | The terminal itself is stuck, not the app: close it (🗑 trash icon in the terminal list) and open a new one with **+** |
 | `Could not reach Ollama` | `bash .devcontainer/start-ollama.sh` (Ollama doesn't restart by itself after the Codespace sleeps) |
 | A model is missing | `ollama pull <model>` |
 | Setup failed during creation | Run `bash .devcontainer/setup.sh` again in the terminal; it skips finished steps |
