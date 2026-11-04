@@ -127,6 +127,9 @@ writes `eval/results/<run_id>_{examples,summary}.csv` + `_meta.json` (with hardw
 the Evaluation page reads them. Never hand-edit numbers into the README: run
 `python scripts/benchmark_table.py --write`.
 
+Codespaces / dev container: `.devcontainer/` installs everything on create;
+`bash .devcontainer/run-app.sh` starts Ollama + API + UI. Guide: `docs/CODESPACES.md`.
+
 Docker: `docker compose up -d --build` (bundled Ollama) or add
 `-f docker-compose.host-ollama.yml` to use the host's Ollama.
 

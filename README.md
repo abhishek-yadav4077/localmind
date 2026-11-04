@@ -6,6 +6,8 @@
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.x-1c3c3c)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/abhishek-yadav4077/localmind?quickstart=1)
+
 A fully local chatbot platform on [Ollama](https://ollama.com): **no prompt or
 answer leaves your machine.** Chat with open-source models, compare them in a
 blind arena, let a LangGraph agent use tools, ask questions about your PDFs, and
@@ -88,6 +90,13 @@ python scripts/run_eval.py --judge qwen2.5:7b      # writes eval/results/<run_id
 python scripts/benchmark_table.py --write          # regenerates this section (incl. hardware)
 ```
 <!-- BENCHMARK:END -->
+
+## Run it in your browser (no install)
+
+Click **Open in GitHub Codespaces** above (free GitHub accounts include a monthly
+allowance). The Codespace installs the app and Ollama, and downloads small models
+automatically (~10–20 min the first time). Then run `bash .devcontainer/run-app.sh`
+and open port 8501. Step-by-step: [`docs/CODESPACES.md`](docs/CODESPACES.md).
 
 ## Quick start (local)
 
