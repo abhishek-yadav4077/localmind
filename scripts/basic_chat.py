@@ -25,7 +25,9 @@ load_dotenv()  # must run before the first LangChain call so tracing env vars ar
 
 parser = argparse.ArgumentParser(description="Send one prompt to a local Ollama model.")
 parser.add_argument("--model", default="llama3.2")
-parser.add_argument("--prompt", default="What is Ollama? Answer in two sentences.")
+parser.add_argument(
+    "--prompt", default="What is machine learning? Answer in two sentences for a beginner."
+)
 args = parser.parse_args()
 
 trace_config = {
