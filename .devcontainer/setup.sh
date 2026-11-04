@@ -11,8 +11,14 @@ python -m pip install -e ".[dev]"
 echo "==> [2/4] Ollama"
 if ! command -v ollama >/dev/null 2>&1; then
   # The installer unpacks a .tar.zst archive, so zstd must be present.
-  sudo apt-get update -qq
-  sudo apt-get install -y -qq zstd
+  if ! command -v zstd >/dev/null 2>&1; then
+    # The devcontainer base image ships a Yarn apt source whose signing key is
+    # missing, which makes `apt-get update` fail ("NO_PUBKEY ... dl.yarnpkg.com").
+    # This project doesn't use Yarn, so drop that source before updating.
+    grep -l "dl.yarnpkg.com" /etc/apt/sources.list.d/* 2>/dev/null | xargs -r sudo rm -f || true
+    sudo apt-get update -qq || echo "WARNING: apt-get update reported errors; trying to install zstd anyway"
+    sudo apt-get install -y -qq zstd
+  fi
   curl -fsSL https://ollama.com/install.sh | sh
 fi
 bash .devcontainer/start-ollama.sh
