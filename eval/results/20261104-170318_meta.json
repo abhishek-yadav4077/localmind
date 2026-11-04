@@ -1,0 +1,47 @@
+{
+  "run_id": "20261104-170318",
+  "created_at": "2026-11-04T17:06:11+00:00",
+  "models": [
+    "llama3.2",
+    "llama3.2:1b"
+  ],
+  "judge_model": "qwen2.5:3b",
+  "dataset": {
+    "name": "localmind-eval-f9249c2c",
+    "content_hash": "f9249c2c",
+    "examples": 5
+  },
+  "params": {
+    "temperature": 0.0,
+    "top_p": 0.9,
+    "max_tokens": 512,
+    "num_ctx": 4096
+  },
+  "langsmith": true,
+  "experiments": [
+    {
+      "model": "llama3.2",
+      "name": "localmind-llama3.2-2110d099",
+      "id": "f95148e2-9a35-492d-817b-3edd3edb33d2",
+      "url": "https://smith.langchain.com/o/32ca671f-9091-4d2f-a806-7e0a35c7e9d7/datasets/d52bcc0b-5518-49b1-9519-1f8cec59973c/compare?selectedSessions=f95148e2-9a35-492d-817b-3edd3edb33d2"
+    },
+    {
+      "model": "llama3.2:1b",
+      "name": "localmind-llama3.2:1b-d67a9a37",
+      "id": "52d00345-4d09-43ae-bb06-9ebdd67fee59",
+      "url": "https://smith.langchain.com/o/32ca671f-9091-4d2f-a806-7e0a35c7e9d7/datasets/d52bcc0b-5518-49b1-9519-1f8cec59973c/compare?selectedSessions=52d00345-4d09-43ae-bb06-9ebdd67fee59"
+    }
+  ],
+  "comparison_url": "https://smith.langchain.com/o/32ca671f-9091-4d2f-a806-7e0a35c7e9d7/datasets/d52bcc0b-5518-49b1-9519-1f8cec59973c/compare?selectedSessions=f95148e2-9a35-492d-817b-3edd3edb33d2,52d00345-4d09-43ae-bb06-9ebdd67fee59",
+  "hardware": {
+    "os": "Linux 6.8.0-1064-azure",
+    "machine": "x86_64",
+    "cpu": "AMD EPYC 7763 64-Core Processor",
+    "cpu_cores": 4,
+    "ram_gb": 15.6,
+    "gpu": null,
+    "python": "3.12.11"
+  },
+  "ollama_version": "0.40.14",
+  "app_version": "0.1.0"
+}
